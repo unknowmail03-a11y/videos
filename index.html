@@ -44,32 +44,6 @@
     </div>
 
     <script>
-        // Exact list of videos located in the same folder as index.html
-        const knownVideoFiles = [
-            "ANALYTIC PAGE.mp4",
-            "DEBTORS return and refund.mp4",
-            "DESKTOP VIDEO ABOUT POS PAGE.mp4",
-            "Only Assign barcode.mp4",
-            "POS return and refund.mp4",
-            "Suki points page.mp4",
-            "Where to connect printer.mp4",
-            "ad 3.mp4",
-            "ad 4.mp4",
-            "ad 6.mp4",
-            "ad1.mp4",
-            "add cost for profit.mp4",
-            "add customer, enable rewards, add re...mp4",
-            "add stocks each item on inventory.mp4",
-            "add stocks using restocking within app...mp4",
-            "add-product-using-bulk-add-product....mp4",
-            "asign-categories.mp4",
-            "cashier page add cashier block cashier...mp4",
-            "change total amount on cart each item....mp4",
-            "debtor partial paid add item qty.mp4",
-            "finance add amount, categories, incom...mp4",
-            "tiktok_1_V1.mp4"
-        ];
-
         window.addEventListener('DOMContentLoaded', () => {
             loadVideos();
         });
@@ -78,7 +52,6 @@
             const container = document.getElementById('grid-container');
             let videoList = [];
 
-            // First try to dynamically scan directory via fetch if hosted on local server
             try {
                 const response = await fetch('./');
                 if (response.ok) {
@@ -98,20 +71,43 @@
                             });
                         }
                     });
-                    if (found.length > 0) {
-                        videoList = found;
-                    }
+                    
+                    // Deduplicate by name
+                    const uniqueMap = new Map();
+                    found.forEach(v => uniqueMap.set(v.name, v));
+                    videoList = Array.from(uniqueMap.values());
                 }
             } catch (e) {
-                console.log('Static directory fetch skipped.');
+                console.log('Dynamic directory fetch restricted or unavailable.');
             }
 
-            // Fallback or combine with the known repository file list
+            // Fallback: if no directory listing is enabled on the static server,
+            // we provide an automated search or prompt user if empty.
             if (videoList.length === 0) {
-                videoList = knownVideoFiles.map(filename => ({
-                    name: filename,
-                    url: encodeURIComponent(filename).replace(/%20/g, ' ') // properly format local relative URL
-                }));
+                videoList = [
+                    { name: "ANALYTIC PAGE.mp4", url: "ANALYTIC PAGE.mp4" },
+                    { name: "DEBTORS return and refund.mp4", url: "DEBTORS return and refund.mp4" },
+                    { name: "DESKTOP VIDEO ABOUT POS PAGE.mp4", url: "DESKTOP VIDEO ABOUT POS PAGE.mp4" },
+                    { name: "Only Assign barcode.mp4", url: "Only Assign barcode.mp4" },
+                    { name: "POS return and refund.mp4", url: "POS return and refund.mp4" },
+                    { name: "Suki points page.mp4", url: "Suki points page.mp4" },
+                    { name: "Where to connect printer.mp4", url: "Where to connect printer.mp4" },
+                    { name: "ad 3.mp4", url: "ad 3.mp4" },
+                    { name: "ad 4.mp4", url: "ad 4.mp4" },
+                    { name: "ad 6.mp4", url: "ad 6.mp4" },
+                    { name: "ad1.mp4", url: "ad1.mp4" },
+                    { name: "add cost for profit.mp4", url: "add cost for profit.mp4" },
+                    { name: "add customer, enable rewards, add re...mp4", url: "add customer, enable rewards, add re...mp4" },
+                    { name: "add stocks each item on inventory.mp4", url: "add stocks each item on inventory.mp4" },
+                    { name: "add stocks using restocking within app...mp4", url: "add stocks using restocking within app...mp4" },
+                    { name: "add-product-using-bulk-add-product....mp4", url: "add-product-using-bulk-add-product....mp4" },
+                    { name: "asign-categories.mp4", url: "asign-categories.mp4" },
+                    { name: "cashier page add cashier block cashier...mp4", url: "cashier page add cashier block cashier...mp4" },
+                    { name: "change total amount on cart each item....mp4", url: "change total amount on cart each item....mp4" },
+                    { name: "debtor partial paid add item qty.mp4", url: "debtor partial paid add item qty.mp4" },
+                    { name: "finance add amount, categories, incom...mp4", url: "finance add amount, categories, incom...mp4" },
+                    { name: "tiktok_1_V1.mp4", url: "tiktok_1_V1.mp4" }
+                ];
             }
 
             renderGrid(videoList);
