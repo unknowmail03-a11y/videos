@@ -9,64 +9,22 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body { font-family: 'Inter', sans-serif; }
-        /* Custom scrollbar for immersive sleek dark mode */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #020617; }
         ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #334155; }
     </style>
 </head>
-<body class="h-full text-slate-100 flex flex-col overflow-x-hidden selection:bg-indigo-500 selection:text-white">
-
-    <div id="app" class="flex-1 w-full p-4 md:p-6 flex flex-col">
-        
-        <!-- Top Floating Control Bar (Subtle, minimalist, collapsible or overlay) -->
-        <div class="flex flex-wrap items-center justify-between gap-4 mb-6 bg-slate-900/80 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl transition-all">
-            <div class="flex items-center space-x-3">
-                <div class="bg-indigo-600/20 text-indigo-400 p-2.5 rounded-xl border border-indigo-500/30">
-                    <i class="fa-solid fa-clapperboard text-lg"></i>
-                </div>
-                <div>
-                    <h1 class="font-semibold text-base text-slate-200 tracking-tight">MP4 Video Grid</h1>
-                    <p class="text-xs text-slate-400" id="video-count">Loading videos...</p>
-                </div>
-            </div>
-
-            <div class="flex items-center gap-3">
-                <!-- Folder Picker Input -->
-                <label class="cursor-pointer inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl font-medium text-sm transition shadow-lg shadow-indigo-600/20 active:scale-95">
-                    <i class="fa-solid fa-folder-open"></i>
-                    <span>Select Folder</span>
-                    <input type="file" id="folder-input" webkitdirectory directory multiple class="hidden">
-                </label>
-
-                <!-- Add Individual Files -->
-                <label class="cursor-pointer inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2.5 rounded-xl font-medium text-sm transition border border-slate-700 active:scale-95">
-                    <i class="fa-solid fa-plus"></i>
-                    <span>Add Files</span>
-                    <input type="file" id="file-input" accept="video/mp4" multiple class="hidden">
-                </label>
-
-                <!-- Grid Column Size Toggle -->
-                <div class="hidden sm:flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
 <body class="h-full text-slate-100 flex flex-col overflow-x-hidden selection:bg-indigo-500 selection:text-white bg-slate-950">
 
     <div id="app" class="flex-1 w-full p-4 md:p-6 flex flex-col">
-        
-        <!-- Floating Status / Error Indicator (Only visible if needed) -->
-        <div id="status-banner" class="hidden mb-4 bg-amber-500/10 border border-amber-500/30 text-amber-200 px-4 py-3 rounded-2xl text-sm flex items-center gap-3">
-            <i class="fa-solid fa-triangle-exclamation text-amber-400"></i>
-            <span id="status-text">Scanning folder...</span>
-        </div>
-
         <div id="grid-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-10 flex-1 items-start">
             <!-- Loading State -->
             <div id="loading-state" class="col-span-full flex flex-col items-center justify-center py-32 px-4 text-center">
                 <div class="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center mb-4 border border-indigo-500/30 animate-spin">
                     <i class="fa-solid fa-circle-notch text-xl"></i>
                 </div>
-                <h3 class="text-sm font-medium text-slate-300">Scanning same folder for MP4 videos...</h3>
-                <p class="text-xs text-slate-500 mt-1">If directory listing is restricted by your local browser security, see helper instructions below.</p>
+                <h3 class="text-sm font-medium text-slate-300">Loading videos from folder...</h3>
             </div>
         </div>
     </div>
@@ -86,21 +44,42 @@
     </div>
 
     <script>
-        let videoList = [];
+        // Exact list of videos located in the same folder as index.html
+        const knownVideoFiles = [
+            "ANALYTIC PAGE.mp4",
+            "DEBTORS return and refund.mp4",
+            "DESKTOP VIDEO ABOUT POS PAGE.mp4",
+            "Only Assign barcode.mp4",
+            "POS return and refund.mp4",
+            "Suki points page.mp4",
+            "Where to connect printer.mp4",
+            "ad 3.mp4",
+            "ad 4.mp4",
+            "ad 6.mp4",
+            "ad1.mp4",
+            "add cost for profit.mp4",
+            "add customer, enable rewards, add re...mp4",
+            "add stocks each item on inventory.mp4",
+            "add stocks using restocking within app...mp4",
+            "add-product-using-bulk-add-product....mp4",
+            "asign-categories.mp4",
+            "cashier page add cashier block cashier...mp4",
+            "change total amount on cart each item....mp4",
+            "debtor partial paid add item qty.mp4",
+            "finance add amount, categories, incom...mp4",
+            "tiktok_1_V1.mp4"
+        ];
 
-        // Automatically fetch videos from the same folder on load
         window.addEventListener('DOMContentLoaded', () => {
-            discoverVideosInSameFolder();
+            loadVideos();
         });
 
-        async function discoverVideosInSameFolder() {
+        async function loadVideos() {
             const container = document.getElementById('grid-container');
-            const statusBanner = document.getElementById('status-banner');
-            const statusText = document.getElementById('status-text');
+            let videoList = [];
 
-            // Common list of candidate video filenames or we can attempt directory fetch via Fetch API / HTML scraping if served via a local web server (like python -m http.server)
+            // First try to dynamically scan directory via fetch if hosted on local server
             try {
-                // Attempt to fetch index or directory listing if supported by local web server
                 const response = await fetch('./');
                 if (response.ok) {
                     const htmlText = await response.text();
@@ -108,114 +87,66 @@
                     const doc = parser.parseFromString(htmlText, 'text/html');
                     const links = doc.querySelectorAll('a');
                     
-                    const foundVideos = [];
+                    const found = [];
                     links.forEach(link => {
                         const href = link.getAttribute('href');
                         if (href && href.toLowerCase().endsWith('.mp4')) {
                             const decodedName = decodeURIComponent(href.split('/').pop());
-                            foundVideos.push({
+                            found.push({
                                 name: decodedName,
-                                url: href,
-                                size: 'Local file'
+                                url: href
                             });
                         }
                     });
-
-                    if (foundVideos.length > 0) {
-                        videoList = foundVideos;
-                        renderGrid();
-                        return;
+                    if (found.length > 0) {
+                        videoList = found;
                     }
                 }
-            } catch (err) {
-                console.log('Direct directory index fetch not available (likely opened via file:// protocol). Falling back to sample or manual scan.', err);
+            } catch (e) {
+                console.log('Static directory fetch skipped.');
             }
 
-            // Fallback: If opened via file:// or no server index listing, check common sequential names or allow user drop / manual list
-            // Let's test a sensible default range or show instructions to run a simple local server if opened via file://
-            if (window.location.protocol === 'file:') {
-                statusBanner.classList.remove('hidden');
-                statusText.innerHTML = `Browsers restrict automatic folder scanning on <code class="bg-black/40 px-1.5 py-0.5 rounded text-indigo-300">file://</code> URLs. To auto-load videos from the same folder, run a quick local server (e.g. <code class="bg-black/40 px-1.5 py-0.5 rounded text-indigo-300">python3 -m http.server</code>) or drag & drop your videos here!`;
-            }
-
-            // Let's also listen to drag and drop anywhere so users can easily drop their videos
-            window.addEventListener('dragover', (e) => e.preventDefault());
-            window.addEventListener('drop', (e) => {
-                e.preventDefault();
-                if (e.dataTransfer && e.dataTransfer.files) {
-                    handleDroppedFiles(e.dataTransfer.files);
-                }
-            });
-
-            // If still empty after attempts, show an elegant drop zone prompt
+            // Fallback or combine with the known repository file list
             if (videoList.length === 0) {
+                videoList = knownVideoFiles.map(filename => ({
+                    name: filename,
+                    url: encodeURIComponent(filename).replace(/%20/g, ' ') // properly format local relative URL
+                }));
+            }
+
+            renderGrid(videoList);
+        }
+
+        function renderGrid(videos) {
+            const container = document.getElementById('grid-container');
+            if (!videos || videos.length === 0) {
                 container.innerHTML = `
-                    <div class="col-span-full flex flex-col items-center justify-center py-28 px-4 text-center border-2 border-dashed border-slate-800 rounded-3xl bg-slate-900/20 hover:bg-slate-900/40 transition">
-                        <div class="w-16 h-16 rounded-2xl bg-indigo-600/10 text-indigo-400 flex items-center justify-center mb-4 border border-indigo-500/20">
-                            <i class="fa-solid fa-film text-2xl"></i>
-                        </div>
-                        <h3 class="text-base font-semibold text-slate-200 mb-1">No MP4 files automatically detected</h3>
-                        <p class="text-xs text-slate-400 max-w-md mb-4">If you are running via a local server in the video folder, check filenames. Alternatively, drag & drop your MP4 files directly onto this window.</p>
-                        <div class="inline-flex items-center gap-2 text-xs text-slate-500 bg-slate-900 px-3 py-1.5 rounded-full border border-slate-800">
-                            <i class="fa-solid fa-bolt text-amber-400"></i> Zero headers & zero footers — pure auto-height video grid.
-                        </div>
+                    <div class="col-span-full flex flex-col items-center justify-center py-28 text-center">
+                        <p class="text-sm text-slate-400">No MP4 videos found in this folder.</p>
                     </div>
                 `;
+                return;
             }
-        }
-
-        function handleDroppedFiles(files) {
-            const newVideos = [];
-            for (let file of files) {
-                if (file.type === 'video/mp4' || file.name.toLowerCase().endsWith('.mp4')) {
-                    const url = URL.createObjectURL(file);
-                    newVideos.push({
-                        name: file.name,
-                        size: formatBytes(file.size),
-                        url: url
-                    });
-                }
-            }
-            if (newVideos.length > 0) {
-                videoList = [...videoList, ...newVideos];
-                renderGrid();
-            }
-        }
-
-        function formatBytes(bytes, decimals = 2) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const dm = decimals < 0 ? 0 : decimals;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-        }
-
-        function renderGrid() {
-            const container = document.getElementById('grid-container');
-            const statusBanner = document.getElementById('status-banner');
-            if (statusBanner) statusBanner.classList.add('hidden');
-
-            if (videoList.length === 0) return;
 
             let html = '';
-            videoList.forEach((video) => {
+            videos.forEach((video) => {
+                // Ensure correct relative path encoding
+                const encodedUrl = video.url.includes('/') ? video.url : encodeURI(video.name);
                 html += `
                     <div class="group bg-slate-900/80 rounded-2xl overflow-hidden border border-slate-800/80 shadow-lg hover:border-indigo-500/50 transition-all duration-300 flex flex-col">
-                        <!-- Video Container with auto-height preservation -->
+                        <!-- Auto-height video container -->
                         <div class="relative w-full bg-black/50 overflow-hidden flex items-center justify-center">
                             <video 
-                                src="${video.url}" 
+                                src="${encodedUrl}" 
                                 preload="metadata" 
                                 muted 
                                 loop
-                                class="w-full h-auto max-h-[400px] object-cover group-hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
+                                class="w-full h-auto max-h-[420px] object-cover group-hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
                                 onmouseenter="this.play()" 
                                 onmouseleave="{this.pause(); this.currentTime = 0;}"
-                                onclick="openModal('${video.url}', '${escapeHtml(video.name)}')"
+                                onclick="openModal('${encodedUrl}', '${escapeHtml(video.name)}')"
                             ></video>
                             
-                            <!-- Overlay Play Button Badge -->
                             <div class="absolute inset-0 bg-slate-950/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                                 <div class="w-12 h-12 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition">
                                     <i class="fa-solid fa-play ml-0.5"></i>
@@ -223,13 +154,13 @@
                             </div>
                         </div>
 
-                        <!-- Video Metadata & Quick Actions -->
+                        <!-- Video Title Bar -->
                         <div class="p-3.5 flex items-center justify-between gap-2 bg-slate-900/60">
                             <div class="min-w-0 flex-1">
                                 <h4 class="text-xs font-medium text-slate-200 truncate" title="${escapeHtml(video.name)}">${escapeHtml(video.name)}</h4>
-                                <p class="text-[11px] text-slate-400 mt-0.5">${video.size || 'MP4 Video'}</p>
+                                <p class="text-[11px] text-slate-400 mt-0.5">MP4 Video</p>
                             </div>
-                            <button onclick="openModal('${video.url}', '${escapeHtml(video.name)}')" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white flex items-center justify-center transition shrink-0">
+                            <button onclick="openModal('${encodedUrl}', '${escapeHtml(video.name)}')" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white flex items-center justify-center transition shrink-0">
                                 <i class="fa-solid fa-expand text-xs"></i>
                             </button>
                         </div>
