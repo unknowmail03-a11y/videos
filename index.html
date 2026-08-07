@@ -1,1 +1,290 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MP4 Video Grid</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Custom scrollbar for immersive sleek dark mode */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #020617; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+    </style>
+</head>
+<body class="h-full text-slate-100 flex flex-col overflow-x-hidden selection:bg-indigo-500 selection:text-white">
 
+    <div id="app" class="flex-1 w-full p-4 md:p-6 flex flex-col">
+        
+        <!-- Top Floating Control Bar (Subtle, minimalist, collapsible or overlay) -->
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-6 bg-slate-900/80 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl transition-all">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-600/20 text-indigo-400 p-2.5 rounded-xl border border-indigo-500/30">
+                    <i class="fa-solid fa-clapperboard text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="font-semibold text-base text-slate-200 tracking-tight">MP4 Video Grid</h1>
+                    <p class="text-xs text-slate-400" id="video-count">Loading videos...</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <!-- Folder Picker Input -->
+                <label class="cursor-pointer inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl font-medium text-sm transition shadow-lg shadow-indigo-600/20 active:scale-95">
+                    <i class="fa-solid fa-folder-open"></i>
+                    <span>Select Folder</span>
+                    <input type="file" id="folder-input" webkitdirectory directory multiple class="hidden">
+                </label>
+
+                <!-- Add Individual Files -->
+                <label class="cursor-pointer inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2.5 rounded-xl font-medium text-sm transition border border-slate-700 active:scale-95">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Add Files</span>
+                    <input type="file" id="file-input" accept="video/mp4" multiple class="hidden">
+                </label>
+
+                <!-- Grid Column Size Toggle -->
+                <div class="hidden sm:flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+                    <button onclick="setGridColumns(2)" title="2 Columns" class="grid-col-btn px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition" data-cols="2">2x</button>
+                    <button onclick="setGridColumns(3)" title="3 Columns" class="grid-col-btn px-3 py-1.5 rounded-lg text-xs font-medium text-slate-200 bg-slate-800 transition" data-cols="3">3x</button>
+                    <button onclick="setGridColumns(4)" title="4 Columns" class="grid-col-btn px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition" data-cols="4">4x</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="grid-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 pb-10 flex-1 items-start">
+            <!-- Empty State / Drop Zone Prompt -->
+            <div id="empty-state" class="col-span-full flex flex-col items-center justify-center py-24 px-4 text-center border-2 border-dashed border-slate-800 rounded-3xl bg-slate-900/30 hover:bg-slate-900/50 transition cursor-pointer" onclick="document.getElementById('folder-input').click()">
+                <div class="w-20 h-20 rounded-2xl bg-indigo-600/10 text-indigo-400 flex items-center justify-center mb-4 border border-indigo-500/20 shadow-inner">
+                    <i class="fa-solid fa-folder-tree text-3xl"></i>
+                </div>
+                <h3 class="text-lg font-semibold text-slate-200 mb-1">No MP4 videos loaded yet</h3>
+                <p class="text-sm text-slate-400 max-w-md mb-6">Click <span class="text-indigo-400 font-medium">Select Folder</span> above to instantly grid all MP4 files from your chosen local directory.</p>
+                <div class="inline-flex items-center gap-2 text-xs text-slate-500 bg-slate-900 px-3 py-1.5 rounded-full border border-slate-800">
+                    <i class="fa-solid fa-shield-halved text-emerald-400"></i> Local playback only — your videos never leave your browser.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="video-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl hidden flex items-center justify-center p-4 md:p-10 opacity-0 transition-opacity duration-300">
+        <div class="relative w-full max-w-5xl bg-slate-900 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/50">
+                <h3 id="modal-title" class="font-medium text-sm text-slate-200 truncate pr-4">Video Preview</h3>
+                <button onclick="closeModal()" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="relative flex-1 bg-black flex items-center justify-center overflow-hidden p-2">
+                <video id="modal-video" controls class="max-h-[75vh] w-auto max-w-full rounded-xl shadow-2xl" preload="metadata"></video>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let videoList = [];
+        let currentColumns = 3;
+
+        // Initialize drag & drop support on the entire body window
+        window.addEventListener('dragover', (e) => e.preventDefault());
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (e.dataTransfer && e.dataTransfer.files) {
+                handleFiles(e.dataTransfer.files);
+            }
+        });
+
+        // Folder input change handler
+        document.getElementById('folder-input').addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        // File input change handler
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        function handleFiles(files) {
+            const newVideos = [];
+            for (let file of files) {
+                // Check for mp4 or video MIME type
+                if (file.type === 'video/mp4' || file.name.toLowerCase().endsWith('.mp4')) {
+                    const url = URL.createObjectURL(file);
+                    newVideos.push({
+                        name: file.name,
+                        size: formatBytes(file.size),
+                        url: url,
+                        path: file.webkitRelativePath || file.name
+                    });
+                }
+            }
+
+            if (newVideos.length > 0) {
+                // Append or replace? Let's append newly selected videos or folder items
+                videoList = [...videoList, ...newVideos];
+                renderGrid();
+            } else {
+                showToast("No MP4 files detected in the selection.");
+            }
+        }
+
+        function formatBytes(bytes, decimals = 2) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
+        function setGridColumns(cols) {
+            currentColumns = cols;
+            const container = document.getElementById('grid-container');
+            
+            // Update button active state
+            document.querySelectorAll('.grid-col-btn').forEach(btn => {
+                if (parseInt(btn.dataset.cols) === cols) {
+                    btn.className = "grid-col-btn px-3 py-1.5 rounded-lg text-xs font-medium text-slate-200 bg-slate-800 transition";
+                } else {
+                    btn.className = "grid-col-btn px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition";
+                }
+            });
+
+            // Adjust grid classes
+            container.className = `grid gap-5 pb-10 flex-1 items-start grid-cols-1 sm:grid-cols-2 md:grid-cols-${cols}`;
+        }
+
+        function renderGrid() {
+            const container = document.getElementById('grid-container');
+            const countLabel = document.getElementById('video-count');
+
+            countLabel.textContent = `${videoList.length} MP4 video${videoList.length === 1 ? '' : 's'} loaded`;
+
+            if (videoList.length === 0) {
+                container.innerHTML = `
+                    <div id="empty-state" class="col-span-full flex flex-col items-center justify-center py-24 px-4 text-center border-2 border-dashed border-slate-800 rounded-3xl bg-slate-900/30 hover:bg-slate-900/50 transition cursor-pointer" onclick="document.getElementById('folder-input').click()">
+                        <div class="w-20 h-20 rounded-2xl bg-indigo-600/10 text-indigo-400 flex items-center justify-center mb-4 border border-indigo-500/20 shadow-inner">
+                            <i class="fa-solid fa-folder-tree text-3xl"></i>
+                        </div>
+                        <h3 class="text-lg font-semibold text-slate-200 mb-1">No MP4 videos loaded yet</h3>
+                        <p class="text-sm text-slate-400 max-w-md mb-6">Click <span class="text-indigo-400 font-medium">Select Folder</span> above to instantly grid all MP4 files from your chosen local directory.</p>
+                        <div class="inline-flex items-center gap-2 text-xs text-slate-500 bg-slate-900 px-3 py-1.5 rounded-full border border-slate-800">
+                            <i class="fa-solid fa-shield-halved text-emerald-400"></i> Local playback only — your videos never leave your browser.
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            videoList.forEach((video, index) => {
+                html.formatHTML ? null : null; // placeholder safe check
+                html += `
+                    <div class="group bg-slate-900/90 rounded-2xl overflow-hidden border border-slate-800/80 shadow-lg hover:border-indigo-500/50 transition-all duration-300 flex flex-col">
+                        <!-- Video Container with auto-height preservation -->
+                        <div class="relative w-full bg-black/40 overflow-hidden flex items-center justify-center">
+                            <video 
+                                src="${video.url}" 
+                                preload="metadata" 
+                                muted 
+                                loop
+                                class="w-full h-auto max-h-[350px] object-cover group-hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
+                                onmouseenter="this.play()" 
+                                onmouseleave="{this.pause(); this.currentTime = 0;}"
+                                onclick="openModal('${video.url}', '${escapeHtml(video.name)}')"
+                            ></video>
+                            
+                            <!-- Overlay Play Button Badge -->
+                            <div class="absolute inset-0 bg-slate-950/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                <div class="w-12 h-12 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition">
+                                    <i class="fa-solid fa-play ml-0.5"></i>
+                                </div>
+                            </div>
+
+                            <div class="absolute top-3 right-3 bg-slate-950/80 backdrop-blur-md px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-300 border border-slate-800/80">
+                                MP4
+                            </div>
+                        </div>
+
+                        <!-- Video Metadata & Quick Actions -->
+                        <div class="p-4 flex items-center justify-between gap-3 bg-slate-900/60">
+                            <div class="min-w-0 flex-1">
+                                <h4 class="text-sm font-medium text-slate-200 truncate" title="${escapeHtml(video.name)}">${escapeHtml(video.name)}</h4>
+                                <p class="text-xs text-slate-400 mt-0.5 truncate">${escapeHtml(video.path)} • ${video.size}</p>
+                            </div>
+                            <button onclick="openModal('${video.url}', '${escapeHtml(video.name)}')" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white flex items-center justify-center transition shrink-0">
+                                <i class="fa-solid fa-expand text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function escapeHtml(string) {
+            return String(string).replace(/[&<"']/g, function (m) {
+                return { '&': '&amp;', '<': '&lt;', '"': '&quot;', "'": '&#39;' }[m];
+            });
+        }
+
+        function openModal(url, title) {
+            const modal = document.getElementById('video-modal');
+            const video = document.getElementById('modal-video');
+            const titleEl = document.getElementById('modal-title');
+
+            titleEl.textContent = title;
+            video.src = url;
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                video.play();
+            }, 10);
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('video-modal');
+            const video = document.getElementById('modal-video');
+
+            modal.classList.add('opacity-0');
+            video.pause();
+            video.src = '';
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        // Close modal on background click
+        document.getElementById('video-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'video-modal') {
+                closeModal();
+            }
+        });
+
+        // Close modal on ESC key
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+
+        function showToast(message) {
+            // Simple subtle notification
+            const existing = document.getElementById('toast-notification');
+            if (existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.id = 'toast-notification';
+            toast.className = 'fixed bottom-6 right-6 z-50 bg-slate-900 border border-slate-700 text-slate-200 px-4 py-3 rounded-2xl shadow-2xl text-sm flex items-center gap-3 animate-bounce';
+            toast.innerHTML = `<i class="fa-solid fa-circle-info text-indigo-400"></i><span>${message}</span>`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
+    </script>
+</body>
+</html>
