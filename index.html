@@ -1,18 +1,31 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full bg-slate-950">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MP4 Video Grid</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com">
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #020617; }
-        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #020617;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
     </style>
 </head>
 <body class="h-full text-slate-100 flex flex-col overflow-x-hidden selection:bg-indigo-500 selection:text-white bg-slate-950">
@@ -24,11 +37,13 @@
                 <div class="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center mb-4 border border-indigo-500/30 animate-spin">
                     <i class="fa-solid fa-circle-notch text-xl"></i>
                 </div>
-                <h3 class="text-sm font-medium text-slate-300">Loading videos from folder...</h3>
+                <h3 class="text-sm font-medium text-slate-300">Scanning for MP4 videos…</h3>
+                <p class="text-xs text-slate-500 mt-1.5">This works best when served via a web server with directory listing enabled.</p>
             </div>
         </div>
     </div>
 
+    <!-- Modal -->
     <div id="video-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl hidden flex items-center justify-center p-4 md:p-10 opacity-0 transition-opacity duration-300">
         <div class="relative w-full max-w-5xl bg-slate-900 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col max-h-[90vh]">
             <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/50">
@@ -44,168 +59,165 @@
     </div>
 
     <script>
-        window.addEventListener('DOMContentLoaded', () => {
-            loadVideos();
-        });
+        (function() {
+            'use strict';
 
-        async function loadVideos() {
             const container = document.getElementById('grid-container');
-            let videoList = [];
+            const loadingEl = document.getElementById('loading-state');
 
-            try {
-                const response = await fetch('./');
-                if (response.ok) {
-                    const htmlText = await response.text();
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(htmlText, 'text/html');
-                    const links = doc.querySelectorAll('a');
-                    
-                    const found = [];
-                    links.forEach(link => {
-                        const href = link.getAttribute('href');
-                        if (href && href.toLowerCase().endsWith('.mp4')) {
-                            const decodedName = decodeURIComponent(href.split('/').pop());
-                            found.push({
-                                name: decodedName,
+            // ─── Helpers ──────────────────────────────────────────────
+            function escapeHtml(str) {
+                return String(str).replace(/[&<"']/g, function(m) {
+                    return { '&': '&amp;', '<': '&lt;', '"': '&quot;', "'": '&#39;' } [m];
+                });
+            }
+
+            function openModal(url, title) {
+                const modal = document.getElementById('video-modal');
+                const video = document.getElementById('modal-video');
+                const titleEl = document.getElementById('modal-title');
+                titleEl.textContent = title || 'Video Preview';
+                video.src = url;
+                modal.classList.remove('hidden');
+                requestAnimationFrame(() => {
+                    modal.classList.remove('opacity-0');
+                    video.play().catch(() => {});
+                });
+            }
+
+            window.openModal = openModal;
+
+            function closeModal() {
+                const modal = document.getElementById('video-modal');
+                const video = document.getElementById('modal-video');
+                modal.classList.add('opacity-0');
+                video.pause();
+                video.src = '';
+                setTimeout(() => modal.classList.add('hidden'), 300);
+            }
+            window.closeModal = closeModal;
+
+            // ─── Directory scanner ────────────────────────────────────
+            async function discoverMp4Files() {
+                try {
+                    const response = await fetch('./', { cache: 'no-store' });
+                    if (!response.ok) return [];
+                    const html = await response.text();
+                    const doc = new DOMParser().parseFromString(html, 'text/html');
+                    const links = doc.querySelectorAll('a[href]');
+                    const seen = new Map();
+
+                    for (const a of links) {
+                        let href = a.getAttribute('href');
+                        if (!href || !href.toLowerCase().endsWith('.mp4')) continue;
+
+                        // Decode URL-encoded characters (e.g., %20 → space)
+                        const decoded = decodeURIComponent(href);
+                        const fileName = decoded.split('/').pop() || decoded;
+
+                        // Deduplicate by decoded name
+                        if (!seen.has(fileName)) {
+                            seen.set(fileName, {
+                                name: fileName,
                                 url: href
                             });
                         }
-                    });
-                    
-                    // Deduplicate by name
-                    const uniqueMap = new Map();
-                    found.forEach(v => uniqueMap.set(v.name, v));
-                    videoList = Array.from(uniqueMap.values());
+                    }
+
+                    return Array.from(seen.values());
+                } catch (_) {
+                    return [];
                 }
-            } catch (e) {
-                console.log('Dynamic directory fetch restricted or unavailable.');
             }
 
-            // Fallback: if no directory listing is enabled on the static server,
-            // we provide an automated search or prompt user if empty.
-            if (videoList.length === 0) {
-                videoList = [
-                    { name: "ANALYTIC PAGE.mp4", url: "ANALYTIC PAGE.mp4" },
-                    { name: "DEBTORS return and refund.mp4", url: "DEBTORS return and refund.mp4" },
-                    { name: "DESKTOP VIDEO ABOUT POS PAGE.mp4", url: "DESKTOP VIDEO ABOUT POS PAGE.mp4" },
-                    { name: "Only Assign barcode.mp4", url: "Only Assign barcode.mp4" },
-                    { name: "POS return and refund.mp4", url: "POS return and refund.mp4" },
-                    { name: "Suki points page.mp4", url: "Suki points page.mp4" },
-                    { name: "Where to connect printer.mp4", url: "Where to connect printer.mp4" },
-                    { name: "ad 3.mp4", url: "ad 3.mp4" },
-                    { name: "ad 4.mp4", url: "ad 4.mp4" },
-                    { name: "ad 6.mp4", url: "ad 6.mp4" },
-                    { name: "ad1.mp4", url: "ad1.mp4" },
-                    { name: "add cost for profit.mp4", url: "add cost for profit.mp4" },
-                    { name: "add customer, enable rewards, add re...mp4", url: "add customer, enable rewards, add re...mp4" },
-                    { name: "add stocks each item on inventory.mp4", url: "add stocks each item on inventory.mp4" },
-                    { name: "add stocks using restocking within app...mp4", url: "add stocks using restocking within app...mp4" },
-                    { name: "add-product-using-bulk-add-product....mp4", url: "add-product-using-bulk-add-product....mp4" },
-                    { name: "asign-categories.mp4", url: "asign-categories.mp4" },
-                    { name: "cashier page add cashier block cashier...mp4", url: "cashier page add cashier block cashier...mp4" },
-                    { name: "change total amount on cart each item....mp4", url: "change total amount on cart each item....mp4" },
-                    { name: "debtor partial paid add item qty.mp4", url: "debtor partial paid add item qty.mp4" },
-                    { name: "finance add amount, categories, incom...mp4", url: "finance add amount, categories, incom...mp4" },
-                    { name: "tiktok_1_V1.mp4", url: "tiktok_1_V1.mp4" }
-                ];
-            }
+            // ─── Render grid ──────────────────────────────────────────
+            function renderGrid(videos) {
+                // Remove loading state
+                if (loadingEl) loadingEl.remove();
 
-            renderGrid(videoList);
-        }
-
-        function renderGrid(videos) {
-            const container = document.getElementById('grid-container');
-            if (!videos || videos.length === 0) {
-                container.innerHTML = `
-                    <div class="col-span-full flex flex-col items-center justify-center py-28 text-center">
-                        <p class="text-sm text-slate-400">No MP4 videos found in this folder.</p>
-                    </div>
-                `;
-                return;
-            }
-
-            let html = '';
-            videos.forEach((video) => {
-                // Ensure correct relative path encoding
-                const encodedUrl = video.url.includes('/') ? video.url : encodeURI(video.name);
-                html += `
-                    <div class="group bg-slate-900/80 rounded-2xl overflow-hidden border border-slate-800/80 shadow-lg hover:border-indigo-500/50 transition-all duration-300 flex flex-col">
-                        <!-- Auto-height video container -->
-                        <div class="relative w-full bg-black/50 overflow-hidden flex items-center justify-center">
-                            <video 
-                                src="${encodedUrl}" 
-                                preload="metadata" 
-                                muted 
-                                loop
-                                class="w-full h-auto max-h-[420px] object-cover group-hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
-                                onmouseenter="this.play()" 
-                                onmouseleave="{this.pause(); this.currentTime = 0;}"
-                                onclick="openModal('${encodedUrl}', '${escapeHtml(video.name)}')"
-                            ></video>
-                            
-                            <div class="absolute inset-0 bg-slate-950/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                                <div class="w-12 h-12 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition">
-                                    <i class="fa-solid fa-play ml-0.5"></i>
+                if (!videos || videos.length === 0) {
+                    container.innerHTML = `
+                            <div class="col-span-full flex flex-col items-center justify-center py-28 px-4 text-center">
+                                <div class="w-14 h-14 rounded-2xl bg-slate-800/50 text-slate-600 flex items-center justify-center mb-4 border border-slate-700/50">
+                                    <i class="fa-regular fa-file-video text-2xl"></i>
+                                </div>
+                                <p class="text-sm font-medium text-slate-300">No MP4 videos found</p>
+                                <p class="text-xs text-slate-500 max-w-sm mt-1.5">
+                                    Place <span class="text-indigo-400 font-mono text-[11px]">.mp4</span> files in the same folder as this page.
+                                    Directory listing must be enabled on your web server.
+                                </p>
+                                <div class="mt-5 flex items-center gap-3 text-[11px] text-slate-600">
+                                    <span class="flex items-center gap-1.5"><i class="fa-regular fa-circle-check text-emerald-500/60"></i> auto‑discover</span>
+                                    <span class="w-px h-4 bg-slate-800"></span>
+                                    <span class="flex items-center gap-1.5"><i class="fa-regular fa-folder-open text-indigo-400/60"></i> same folder</span>
                                 </div>
                             </div>
-                        </div>
+                        `;
+                    return;
+                }
 
-                        <!-- Video Title Bar -->
-                        <div class="p-3.5 flex items-center justify-between gap-2 bg-slate-900/60">
-                            <div class="min-w-0 flex-1">
-                                <h4 class="text-xs font-medium text-slate-200 truncate" title="${escapeHtml(video.name)}">${escapeHtml(video.name)}</h4>
-                                <p class="text-[11px] text-slate-400 mt-0.5">MP4 Video</p>
+                let html = '';
+                for (const v of videos) {
+                    const encoded = v.url.includes('/') ? v.url : encodeURI(v.name);
+                    const safeName = escapeHtml(v.name);
+                    html += `
+                            <div class="group bg-slate-900/80 rounded-2xl overflow-hidden border border-slate-800/80 shadow-lg hover:border-indigo-500/50 transition-all duration-300 flex flex-col">
+                                <div class="relative w-full bg-black/50 overflow-hidden flex items-center justify-center">
+                                    <video
+                                        src="${encoded}"
+                                        preload="metadata"
+                                        muted
+                                        loop
+                                        playsinline
+                                        class="w-full h-auto max-h-[420px] object-cover group-hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
+                                        onmouseenter="this.play()"
+                                        onmouseleave="this.pause(); this.currentTime = 0;"
+                                        onclick="openModal('${encoded}', '${safeName}')"
+                                    ></video>
+                                    <div class="absolute inset-0 bg-slate-950/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                        <div class="w-12 h-12 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition">
+                                            <i class="fa-solid fa-play ml-0.5"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="p-3.5 flex items-center justify-between gap-2 bg-slate-900/60">
+                                    <div class="min-w-0 flex-1">
+                                        <h4 class="text-xs font-medium text-slate-200 truncate" title="${safeName}">${safeName}</h4>
+                                        <p class="text-[11px] text-slate-400 mt-0.5">MP4 · ${(v.name.length > 30 ? v.name.slice(0, 30) + '…' : v.name)}</p>
+                                    </div>
+                                    <button onclick="openModal('${encoded}', '${safeName}')" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white flex items-center justify-center transition shrink-0">
+                                        <i class="fa-solid fa-expand text-xs"></i>
+                                    </button>
+                                </div>
                             </div>
-                            <button onclick="openModal('${encodedUrl}', '${escapeHtml(video.name)}')" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white flex items-center justify-center transition shrink-0">
-                                <i class="fa-solid fa-expand text-xs"></i>
-                            </button>
-                        </div>
-                    </div>
-                `;
+                        `;
+                }
+                container.innerHTML = html;
+            }
+
+            // ─── Boot ─────────────────────────────────────────────────
+            async function loadVideos() {
+                const videos = await discoverMp4Files();
+                renderGrid(videos);
+            }
+
+            // Modal close handlers
+            document.getElementById('video-modal').addEventListener('click', (e) => {
+                if (e.target.id === 'video-modal') closeModal();
+            });
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeModal();
             });
 
-            container.innerHTML = html;
-        }
+            // Start
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', loadVideos);
+            } else {
+                loadVideos();
+            }
 
-        function escapeHtml(string) {
-            return String(string).replace(/[&<"']/g, function (m) {
-                return { '&': '&amp;', '<': '&lt;', '"': '&quot;', "'": '&#39;' }[m];
-            });
-        }
-
-        function openModal(url, title) {
-            const modal = document.getElementById('video-modal');
-            const video = document.getElementById('modal-video');
-            const titleEl = document.getElementById('modal-title');
-
-            titleEl.textContent = title;
-            video.src = url;
-            modal.classList.remove('hidden');
-            setTimeout(() => {
-                modal.classList.remove('opacity-0');
-                video.play();
-            }, 10);
-        }
-
-        function closeModal() {
-            const modal = document.getElementById('video-modal');
-            const video = document.getElementById('modal-video');
-
-            modal.classList.add('opacity-0');
-            video.pause();
-            video.src = '';
-            setTimeout(() => {
-                modal.classList.add('hidden');
-            }, 300);
-        }
-
-        document.getElementById('video-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'video-modal') closeModal();
-        });
-
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeModal();
-        });
+        })();
     </script>
+
 </body>
 </html>
