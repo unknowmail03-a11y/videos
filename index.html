@@ -29,6 +29,31 @@
 </head>
 <body class="h-full text-slate-100 flex flex-col overflow-x-hidden selection:bg-indigo-500 selection:text-white bg-slate-950">
 
+    <!-- Header / Navbar -->
+    <header class="border-b border-slate-800/80 bg-slate-900/50 backdrop-blur-md sticky top-0 z-40 px-4 md:px-6 py-3.5 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center">
+                <i class="fa-solid fa-film text-base"></i>
+            </div>
+            <div>
+                <h1 class="text-sm font-semibold text-slate-100">MP4 Video Gallery</h1>
+                <p id="status-text" class="text-[11px] text-slate-400">Scanning local folder...</p>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-2">
+            <!-- Manual File / Folder Input Fallback -->
+            <label class="cursor-pointer px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700/80 text-xs font-medium text-slate-200 transition flex items-center gap-2">
+                <i class="fa-solid fa-folder-open text-indigo-400"></i>
+                <span>Open Folder / Files</span>
+                <input type="file" id="file-input" accept="video/mp4,video/*" multiple webkitdirectory class="hidden" />
+            </label>
+            <button onclick="init()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition" title="Rescan Folder">
+                <i class="fa-solid fa-rotate-right text-xs"></i>
+            </button>
+        </div>
+    </header>
+
     <div id="app" class="flex-1 w-full p-4 md:p-6 flex flex-col">
         <div id="grid-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-10 flex-1 items-start">
             <!-- Loading State -->
@@ -36,11 +61,12 @@
                 <div class="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center mb-4 border border-indigo-500/30 animate-spin">
                     <i class="fa-solid fa-circle-notch text-xl"></i>
                 </div>
-                <h3 class="text-sm font-medium text-slate-300">Scanning folder for MP4 videos...</h3>
+                <h3 class="text-sm font-medium text-slate-300">Scanning directory for MP4 videos...</h3>
             </div>
         </div>
     </div>
 
+    <!-- Video Modal -->
     <div id="video-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl hidden flex items-center justify-center p-4 md:p-10 opacity-0 transition-opacity duration-300">
         <div class="relative w-full max-w-5xl bg-slate-900 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col max-h-[90vh]">
             <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/50">
@@ -60,7 +86,8 @@
             'use strict';
 
             const container = document.getElementById('grid-container');
-            const loadingEl = document.getElementById('loading-state');
+            const statusEl = document.getElementById('status-text');
+            const fileInput = document.getElementById('file-input');
 
             function escapeHtml(str) {
                 return String(str).replace(/[&<"']/g, function(m) {
@@ -93,64 +120,81 @@
             window.closeModal = closeModal;
 
             async function discoverMp4Files() {
-                try {
-                    const response = await fetch('./', { cache: 'no-store' });
-                    if (!response.ok) return [];
-                    const text = await response.text();
-                    
-                    const seen = new Map();
+                const seen = new Map();
 
-                    // Check if server returns JSON (some custom static servers)
-                    if (response.headers.get('content-type')?.includes('application/json')) {
-                        const json = JSON.parse(text);
-                        const files = Array.isArray(json) ? json : (json.files || json.contents || []);
-                        files.forEach(f => {
-                            const name = typeof f === 'string' ? f : (f.name || f.path);
-                            if (name && name.toLowerCase().endsWith('.mp4')) {
-                                const decoded = decodeURIComponent(name);
-                                const fileName = decoded.split('/').pop();
-                                seen.set(fileName, { name: fileName, url: name });
-                            }
-                        });
-                    } else {
-                        // Parse HTML directory listing (Apache, Nginx, Python http.server, etc.)
-                        const doc = new DOMParser().parseFromString(text, 'text/html');
-                        const links = doc.querySelectorAll('a[href]');
+                function addVideo(rawPath) {
+                    if (!rawPath) return;
+                    let clean = rawPath.split('?')[0].split('#')[0];
+                    if (!clean.toLowerCase().endsWith('.mp4')) return;
 
-                        links.forEach(a => {
-                            let href = a.getAttribute('href');
-                            if (!href) return;
+                    let decodedName = clean;
+                    try {
+                        decodedName = decodeURIComponent(clean);
+                    } catch (e) {}
 
-                            // Clean query strings or hashes if present
-                            href = href.split('?')[0].split('#')[0];
-
-                            if (href.toLowerCase().endsWith('.mp4')) {
-                                // Extract clean filename
-                                let cleanPath = href;
-                                try {
-                                    cleanPath = decodeURIComponent(href);
-                                } catch (e) {}
-
-                                const fileName = cleanPath.split('/').pop();
-                                if (fileName && !seen.has(fileName)) {
-                                    seen.set(fileName, {
-                                        name: fileName,
-                                        url: href
-                                    });
-                                }
-                            }
+                    const fileName = decodedName.split('/').pop().trim();
+                    if (fileName && !seen.has(fileName.toLowerCase())) {
+                        seen.set(fileName.toLowerCase(), {
+                            name: fileName,
+                            url: rawPath
                         });
                     }
-
-                    return Array.from(seen.values());
-                } catch (err) {
-                    console.error('Directory fetch error:', err);
-                    return [];
                 }
+
+                // Standard endpoint targets to check
+                const targets = [
+                    location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1) || './',
+                    './'
+                ];
+
+                for (const target of targets) {
+                    try {
+                        const response = await fetch(target, { cache: 'no-store' });
+                        if (!response.ok) continue;
+
+                        const contentType = response.headers.get('content-type') || '';
+                        const text = await response.text();
+
+                        if (contentType.includes('application/json')) {
+                            try {
+                                const json = JSON.parse(text);
+                                const files = Array.isArray(json) ? json : (json.files || json.contents || []);
+                                files.forEach(f => {
+                                    const path = typeof f === 'string' ? f : (f.name || f.path);
+                                    addVideo(path);
+                                });
+                            } catch (e) {}
+                        } else {
+                            // Method 1: DOM Parsing for standard HTML directory listings (Apache, Nginx, Python http.server)
+                            const doc = new DOMParser().parseFromString(text, 'text/html');
+                            const links = doc.querySelectorAll('a[href], area[href]');
+                            links.forEach(a => {
+                                const href = a.getAttribute('href');
+                                addVideo(href);
+                            });
+
+                            // Method 2: Regex scanning for custom text listings or raw string references
+                            const regex = /(?:href|src)=["']?([^"'` >]+?\.mp4(?:\?[^"'` >]*)?)["']?|([a-zA-Z0-9_\-\s%.\(\)]+\.mp4)/gi;
+                            let match;
+                            while ((match = regex.exec(text)) !== null) {
+                                const candidate = match[1] || match[2];
+                                addVideo(candidate);
+                            }
+                        }
+                    } catch (err) {
+                        console.warn('Fetch error for target', target, err);
+                    }
+
+                    if (seen.size > 0) break;
+                }
+
+                return Array.from(seen.values());
             }
 
             function renderGrid(videos) {
-                if (loadingEl) loadingEl.remove();
+                if (statusEl) {
+                    statusEl.textContent = videos.length > 0 ? `Found ${videos.length} MP4 video${videos.length === 1 ? '' : 's'}` : 'No videos found';
+                }
 
                 if (!videos || videos.length === 0) {
                     container.innerHTML = `
@@ -160,7 +204,7 @@
                             </div>
                             <p class="text-sm font-medium text-slate-300">No MP4 videos detected in this folder</p>
                             <p class="text-xs text-slate-500 max-w-sm mt-1.5 leading-relaxed">
-                                Ensure your local web server has directory index listing enabled so the page can scan the folder automatically.
+                                Ensure directory indexing is enabled on your local web server, or click <strong>"Open Folder / Files"</strong> above to select videos directly.
                             </p>
                         </div>
                     `;
@@ -173,15 +217,15 @@
                     const safeName = escapeHtml(v.name);
                     html += `
                         <div class="group bg-slate-900/80 rounded-2xl overflow-hidden border border-slate-800/80 shadow-lg hover:border-indigo-500/50 transition-all duration-300 flex flex-col">
-                            <div class="relative w-full bg-black/50 overflow-hidden flex items-center justify-center">
+                            <div class="relative w-full bg-black/50 overflow-hidden flex items-center justify-center aspect-video">
                                 <video 
                                     src="${encodedUrl}" 
                                     preload="metadata" 
                                     muted 
                                     loop 
                                     playsinline
-                                    class="w-full h-auto max-h-[420px] object-cover group-hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
-                                    onmouseenter="this.play()" 
+                                    class="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
+                                    onmouseenter="this.play().catch(()=>{})" 
                                     onmouseleave="this.pause(); this.currentTime = 0;"
                                     onclick="openModal('${encodedUrl}', '${safeName}')"
                                 ></video>
@@ -207,10 +251,36 @@
             }
 
             async function init() {
+                container.innerHTML = `
+                    <div id="loading-state" class="col-span-full flex flex-col items-center justify-center py-32 px-4 text-center">
+                        <div class="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center mb-4 border border-indigo-500/30 animate-spin">
+                            <i class="fa-solid fa-circle-notch text-xl"></i>
+                        </div>
+                        <h3 class="text-sm font-medium text-slate-300">Scanning directory for MP4 videos...</h3>
+                    </div>
+                `;
+                if (statusEl) statusEl.textContent = 'Scanning local folder...';
+                
                 const videos = await discoverMp4Files();
                 renderGrid(videos);
             }
+            window.init = init;
 
+            // Handle manual local file selecting
+            if (fileInput) {
+                fileInput.addEventListener('change', (e) => {
+                    const files = Array.from(e.target.files || []).filter(f => f.name.toLowerCase().endsWith('.mp4'));
+                    if (files.length > 0) {
+                        const videoList = files.map(file => ({
+                            name: file.name,
+                            url: URL.createObjectURL(file)
+                        }));
+                        renderGrid(videoList);
+                    }
+                });
+            }
+
+            // Close modal on background click or ESC key
             document.getElementById('video-modal').addEventListener('click', (e) => {
                 if (e.target.id === 'video-modal') closeModal();
             });
