@@ -4,8 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MP4 Video Grid</title>
-    <script src="https://cdn.tailwindcss.com">
-    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <style>
@@ -37,13 +36,11 @@
                 <div class="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center mb-4 border border-indigo-500/30 animate-spin">
                     <i class="fa-solid fa-circle-notch text-xl"></i>
                 </div>
-                <h3 class="text-sm font-medium text-slate-300">Scanning for MP4 videos…</h3>
-                <p class="text-xs text-slate-500 mt-1.5">This works best when served via a web server with directory listing enabled.</p>
+                <h3 class="text-sm font-medium text-slate-300">Scanning folder for MP4 videos...</h3>
             </div>
         </div>
     </div>
 
-    <!-- Modal -->
     <div id="video-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl hidden flex items-center justify-center p-4 md:p-10 opacity-0 transition-opacity duration-300">
         <div class="relative w-full max-w-5xl bg-slate-900 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col max-h-[90vh]">
             <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/50">
@@ -65,10 +62,9 @@
             const container = document.getElementById('grid-container');
             const loadingEl = document.getElementById('loading-state');
 
-            // ─── Helpers ──────────────────────────────────────────────
             function escapeHtml(str) {
                 return String(str).replace(/[&<"']/g, function(m) {
-                    return { '&': '&amp;', '<': '&lt;', '"': '&quot;', "'": '&#39;' } [m];
+                    return { '&': '&amp;', '<': '&lt;', '"': '&quot;', "'": '&#39;' }[m];
                 });
             }
 
@@ -84,7 +80,6 @@
                     video.play().catch(() => {});
                 });
             }
-
             window.openModal = openModal;
 
             function closeModal() {
@@ -97,111 +92,125 @@
             }
             window.closeModal = closeModal;
 
-            // ─── Directory scanner ────────────────────────────────────
             async function discoverMp4Files() {
                 try {
                     const response = await fetch('./', { cache: 'no-store' });
                     if (!response.ok) return [];
-                    const html = await response.text();
-                    const doc = new DOMParser().parseFromString(html, 'text/html');
-                    const links = doc.querySelectorAll('a[href]');
+                    const text = await response.text();
+                    
                     const seen = new Map();
 
-                    for (const a of links) {
-                        let href = a.getAttribute('href');
-                        if (!href || !href.toLowerCase().endsWith('.mp4')) continue;
+                    // Check if server returns JSON (some custom static servers)
+                    if (response.headers.get('content-type')?.includes('application/json')) {
+                        const json = JSON.parse(text);
+                        const files = Array.isArray(json) ? json : (json.files || json.contents || []);
+                        files.forEach(f => {
+                            const name = typeof f === 'string' ? f : (f.name || f.path);
+                            if (name && name.toLowerCase().endsWith('.mp4')) {
+                                const decoded = decodeURIComponent(name);
+                                const fileName = decoded.split('/').pop();
+                                seen.set(fileName, { name: fileName, url: name });
+                            }
+                        });
+                    } else {
+                        // Parse HTML directory listing (Apache, Nginx, Python http.server, etc.)
+                        const doc = new DOMParser().parseFromString(text, 'text/html');
+                        const links = doc.querySelectorAll('a[href]');
 
-                        // Decode URL-encoded characters (e.g., %20 → space)
-                        const decoded = decodeURIComponent(href);
-                        const fileName = decoded.split('/').pop() || decoded;
+                        links.forEach(a => {
+                            let href = a.getAttribute('href');
+                            if (!href) return;
 
-                        // Deduplicate by decoded name
-                        if (!seen.has(fileName)) {
-                            seen.set(fileName, {
-                                name: fileName,
-                                url: href
-                            });
-                        }
+                            // Clean query strings or hashes if present
+                            href = href.split('?')[0].split('#')[0];
+
+                            if (href.toLowerCase().endsWith('.mp4')) {
+                                // Extract clean filename
+                                let cleanPath = href;
+                                try {
+                                    cleanPath = decodeURIComponent(href);
+                                } catch (e) {}
+
+                                const fileName = cleanPath.split('/').pop();
+                                if (fileName && !seen.has(fileName)) {
+                                    seen.set(fileName, {
+                                        name: fileName,
+                                        url: href
+                                    });
+                                }
+                            }
+                        });
                     }
 
                     return Array.from(seen.values());
-                } catch (_) {
+                } catch (err) {
+                    console.error('Directory fetch error:', err);
                     return [];
                 }
             }
 
-            // ─── Render grid ──────────────────────────────────────────
             function renderGrid(videos) {
-                // Remove loading state
                 if (loadingEl) loadingEl.remove();
 
                 if (!videos || videos.length === 0) {
                     container.innerHTML = `
-                            <div class="col-span-full flex flex-col items-center justify-center py-28 px-4 text-center">
-                                <div class="w-14 h-14 rounded-2xl bg-slate-800/50 text-slate-600 flex items-center justify-center mb-4 border border-slate-700/50">
-                                    <i class="fa-regular fa-file-video text-2xl"></i>
-                                </div>
-                                <p class="text-sm font-medium text-slate-300">No MP4 videos found</p>
-                                <p class="text-xs text-slate-500 max-w-sm mt-1.5">
-                                    Place <span class="text-indigo-400 font-mono text-[11px]">.mp4</span> files in the same folder as this page.
-                                    Directory listing must be enabled on your web server.
-                                </p>
-                                <div class="mt-5 flex items-center gap-3 text-[11px] text-slate-600">
-                                    <span class="flex items-center gap-1.5"><i class="fa-regular fa-circle-check text-emerald-500/60"></i> auto‑discover</span>
-                                    <span class="w-px h-4 bg-slate-800"></span>
-                                    <span class="flex items-center gap-1.5"><i class="fa-regular fa-folder-open text-indigo-400/60"></i> same folder</span>
-                                </div>
+                        <div class="col-span-full flex flex-col items-center justify-center py-28 px-4 text-center">
+                            <div class="w-14 h-14 rounded-2xl bg-slate-800/50 text-slate-500 flex items-center justify-center mb-4 border border-slate-700/50">
+                                <i class="fa-regular fa-file-video text-2xl"></i>
                             </div>
-                        `;
+                            <p class="text-sm font-medium text-slate-300">No MP4 videos detected in this folder</p>
+                            <p class="text-xs text-slate-500 max-w-sm mt-1.5 leading-relaxed">
+                                Ensure your local web server has directory index listing enabled so the page can scan the folder automatically.
+                            </p>
+                        </div>
+                    `;
                     return;
                 }
 
                 let html = '';
-                for (const v of videos) {
-                    const encoded = v.url.includes('/') ? v.url : encodeURI(v.name);
+                videos.forEach(v => {
+                    const encodedUrl = v.url;
                     const safeName = escapeHtml(v.name);
                     html += `
-                            <div class="group bg-slate-900/80 rounded-2xl overflow-hidden border border-slate-800/80 shadow-lg hover:border-indigo-500/50 transition-all duration-300 flex flex-col">
-                                <div class="relative w-full bg-black/50 overflow-hidden flex items-center justify-center">
-                                    <video
-                                        src="${encoded}"
-                                        preload="metadata"
-                                        muted
-                                        loop
-                                        playsinline
-                                        class="w-full h-auto max-h-[420px] object-cover group-hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
-                                        onmouseenter="this.play()"
-                                        onmouseleave="this.pause(); this.currentTime = 0;"
-                                        onclick="openModal('${encoded}', '${safeName}')"
-                                    ></video>
-                                    <div class="absolute inset-0 bg-slate-950/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                                        <div class="w-12 h-12 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition">
-                                            <i class="fa-solid fa-play ml-0.5"></i>
-                                        </div>
+                        <div class="group bg-slate-900/80 rounded-2xl overflow-hidden border border-slate-800/80 shadow-lg hover:border-indigo-500/50 transition-all duration-300 flex flex-col">
+                            <div class="relative w-full bg-black/50 overflow-hidden flex items-center justify-center">
+                                <video 
+                                    src="${encodedUrl}" 
+                                    preload="metadata" 
+                                    muted 
+                                    loop 
+                                    playsinline
+                                    class="w-full h-auto max-h-[420px] object-cover group-hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
+                                    onmouseenter="this.play()" 
+                                    onmouseleave="this.pause(); this.currentTime = 0;"
+                                    onclick="openModal('${encodedUrl}', '${safeName}')"
+                                ></video>
+                                <div class="absolute inset-0 bg-slate-950/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                    <div class="w-12 h-12 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition">
+                                        <i class="fa-solid fa-play ml-0.5"></i>
                                     </div>
-                                </div>
-                                <div class="p-3.5 flex items-center justify-between gap-2 bg-slate-900/60">
-                                    <div class="min-w-0 flex-1">
-                                        <h4 class="text-xs font-medium text-slate-200 truncate" title="${safeName}">${safeName}</h4>
-                                        <p class="text-[11px] text-slate-400 mt-0.5">MP4 · ${(v.name.length > 30 ? v.name.slice(0, 30) + '…' : v.name)}</p>
-                                    </div>
-                                    <button onclick="openModal('${encoded}', '${safeName}')" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white flex items-center justify-center transition shrink-0">
-                                        <i class="fa-solid fa-expand text-xs"></i>
-                                    </button>
                                 </div>
                             </div>
-                        `;
-                }
+                            <div class="p-3.5 flex items-center justify-between gap-2 bg-slate-900/60">
+                                <div class="min-w-0 flex-1">
+                                    <h4 class="text-xs font-medium text-slate-200 truncate" title="${safeName}">${safeName}</h4>
+                                    <p class="text-[11px] text-slate-400 mt-0.5">MP4 Video</p>
+                                </div>
+                                <button onclick="openModal('${encodedUrl}', '${safeName}')" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white flex items-center justify-center transition shrink-0">
+                                    <i class="fa-solid fa-expand text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
                 container.innerHTML = html;
             }
 
-            // ─── Boot ─────────────────────────────────────────────────
-            async function loadVideos() {
+            async function init() {
                 const videos = await discoverMp4Files();
                 renderGrid(videos);
             }
 
-            // Modal close handlers
             document.getElementById('video-modal').addEventListener('click', (e) => {
                 if (e.target.id === 'video-modal') closeModal();
             });
@@ -209,15 +218,13 @@
                 if (e.key === 'Escape') closeModal();
             });
 
-            // Start
             if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', loadVideos);
+                document.addEventListener('DOMContentLoaded', init);
             } else {
-                loadVideos();
+                init();
             }
 
         })();
     </script>
-
 </body>
 </html>
