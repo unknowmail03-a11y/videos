@@ -29,31 +29,49 @@
 </head>
 <body class="h-full text-slate-100 flex flex-col overflow-x-hidden selection:bg-indigo-500 selection:text-white bg-slate-950">
 
-    <!-- Header / Navbar -->
-    <header class="border-b border-slate-800/80 bg-slate-900/50 backdrop-blur-md sticky top-0 z-40 px-4 md:px-6 py-3.5 flex items-center justify-between">
+    <!-- Navbar Header -->
+    <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-40 px-4 md:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center">
+            <div class="w-9 h-9 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shrink-0">
                 <i class="fa-solid fa-film text-base"></i>
             </div>
             <div>
-                <h1 class="text-sm font-semibold text-slate-100">MP4 Video Gallery</h1>
-                <p id="status-text" class="text-[11px] text-slate-400">Scanning local folder...</p>
+                <h1 class="text-sm font-semibold text-slate-100 leading-none">MP4 Video Gallery</h1>
+                <p id="status-text" class="text-[11px] text-slate-400 mt-1">Ready to scan</p>
             </div>
         </div>
-        
-        <div class="flex items-center gap-2">
-            <!-- Manual File / Folder Input Fallback -->
-            <label class="cursor-pointer px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700/80 text-xs font-medium text-slate-200 transition flex items-center gap-2">
+
+        <div class="flex items-center flex-wrap gap-2">
+            <!-- GitHub Repository Input -->
+            <div class="flex items-center bg-slate-950/80 border border-slate-800 rounded-xl px-2.5 py-1 focus-within:border-indigo-500/50 transition">
+                <i class="fa-brands fa-github text-slate-400 text-xs mr-2"></i>
+                <input 
+                    type="text" 
+                    id="github-repo-input" 
+                    placeholder="owner/repo (e.g. unknowmail03-a11y/videos)" 
+                    value="unknowmail03-a11y/videos"
+                    class="bg-transparent text-xs text-slate-200 placeholder-slate-500 focus:outline-none w-48 sm:w-60"
+                />
+                <button onclick="fetchFromGitHubInput()" class="text-xs text-indigo-400 hover:text-indigo-300 font-medium ml-1.5 px-1.5 py-0.5 rounded hover:bg-indigo-500/10 transition">
+                    Load
+                </button>
+            </div>
+
+            <!-- Manual Folder / File Input -->
+            <label class="cursor-pointer px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700/80 text-xs font-medium text-slate-200 transition flex items-center gap-1.5 shrink-0">
                 <i class="fa-solid fa-folder-open text-indigo-400"></i>
-                <span>Open Folder / Files</span>
+                <span class="hidden sm:inline">Open Local</span>
                 <input type="file" id="file-input" accept="video/mp4,video/*" multiple webkitdirectory class="hidden" />
             </label>
-            <button onclick="init()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition" title="Rescan Folder">
+
+            <!-- Refresh Button -->
+            <button onclick="init()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition shrink-0" title="Rescan Directory">
                 <i class="fa-solid fa-rotate-right text-xs"></i>
             </button>
         </div>
     </header>
 
+    <!-- Main Container -->
     <div id="app" class="flex-1 w-full p-4 md:p-6 flex flex-col">
         <div id="grid-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-10 flex-1 items-start">
             <!-- Loading State -->
@@ -61,12 +79,12 @@
                 <div class="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center mb-4 border border-indigo-500/30 animate-spin">
                     <i class="fa-solid fa-circle-notch text-xl"></i>
                 </div>
-                <h3 class="text-sm font-medium text-slate-300">Scanning directory for MP4 videos...</h3>
+                <h3 class="text-sm font-medium text-slate-300">Scanning for MP4 videos...</h3>
             </div>
         </div>
     </div>
 
-    <!-- Video Modal -->
+    <!-- Video Modal Preview -->
     <div id="video-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl hidden flex items-center justify-center p-4 md:p-10 opacity-0 transition-opacity duration-300">
         <div class="relative w-full max-w-5xl bg-slate-900 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col max-h-[90vh]">
             <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/50">
@@ -88,6 +106,7 @@
             const container = document.getElementById('grid-container');
             const statusEl = document.getElementById('status-text');
             const fileInput = document.getElementById('file-input');
+            const githubInput = document.getElementById('github-repo-input');
 
             function escapeHtml(str) {
                 return String(str).replace(/[&<"']/g, function(m) {
@@ -119,7 +138,68 @@
             }
             window.closeModal = closeModal;
 
-            async function discoverMp4Files() {
+            // Helper to parse GitHub parameters from current URL or text input
+            function detectGitHubInfo() {
+                // 1. Check user input box if non-empty
+                const inputValue = (githubInput ? githubInput.value : '').trim();
+                if (inputValue) {
+                    const clean = inputValue.replace(/^https?:\/\/github\.com\//i, '').replace(/\/$/, '');
+                    const parts = clean.split('/').filter(Boolean);
+                    if (parts.length >= 2) {
+                        return { owner: parts[0], repo: parts[1], path: parts.slice(2).join('/') };
+                    }
+                }
+
+                // 2. Check window location if hosted on GitHub Pages (*.github.io/repo)
+                try {
+                    const loc = new URL(window.location.href);
+                    if (loc.hostname.endsWith('.github.io')) {
+                        const owner = loc.hostname.split('.')[0];
+                        const pathParts = loc.pathname.split('/').filter(Boolean);
+                        const repo = pathParts[0];
+                        const subPath = pathParts.slice(1).filter(p => !p.endsWith('.html')).join('/');
+                        if (owner && repo) {
+                            return { owner, repo, path: subPath };
+                        }
+                    }
+                } catch (e) {}
+
+                // Default fallback repository provided
+                return { owner: 'unknowmail03-a11y', repo: 'videos', path: '' };
+            }
+
+            // Fetch video list from GitHub REST API
+            async function fetchFromGitHubApi(owner, repo, path = '') {
+                try {
+                    const apiPath = path ? `contents/${path}` : 'contents';
+                    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/${apiPath}`;
+                    
+                    const response = await fetch(apiUrl, { cache: 'no-store' });
+                    if (!response.ok) return [];
+
+                    const data = await response.json();
+                    if (!Array.isArray(data)) return [];
+
+                    const videos = [];
+                    data.forEach(file => {
+                        if (file.type === 'file' && file.name.toLowerCase().endsWith('.mp4')) {
+                            // Prefer download_url or raw GitHub URL
+                            const downloadUrl = file.download_url || `https://raw.githubusercontent.com/${owner}/${repo}/main/${file.path}`;
+                            videos.push({
+                                name: file.name,
+                                url: downloadUrl
+                            });
+                        }
+                    });
+                    return videos;
+                } catch (err) {
+                    console.warn('GitHub API fetch failed:', err);
+                    return [];
+                }
+            }
+
+            // Fetch video list from local directory (for local servers)
+            async function fetchFromLocalDirectory() {
                 const seen = new Map();
 
                 function addVideo(rawPath) {
@@ -141,7 +221,6 @@
                     }
                 }
 
-                // Standard endpoint targets to check
                 const targets = [
                     location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1) || './',
                     './'
@@ -165,25 +244,19 @@
                                 });
                             } catch (e) {}
                         } else {
-                            // Method 1: DOM Parsing for standard HTML directory listings (Apache, Nginx, Python http.server)
+                            // DOM Link Parsing
                             const doc = new DOMParser().parseFromString(text, 'text/html');
                             const links = doc.querySelectorAll('a[href], area[href]');
-                            links.forEach(a => {
-                                const href = a.getAttribute('href');
-                                addVideo(href);
-                            });
+                            links.forEach(a => addVideo(a.getAttribute('href')));
 
-                            // Method 2: Regex scanning for custom text listings or raw string references
+                            // Regex Fallback
                             const regex = /(?:href|src)=["']?([^"'` >]+?\.mp4(?:\?[^"'` >]*)?)["']?|([a-zA-Z0-9_\-\s%.\(\)]+\.mp4)/gi;
                             let match;
                             while ((match = regex.exec(text)) !== null) {
-                                const candidate = match[1] || match[2];
-                                addVideo(candidate);
+                                addVideo(match[1] || match[2]);
                             }
                         }
-                    } catch (err) {
-                        console.warn('Fetch error for target', target, err);
-                    }
+                    } catch (err) {}
 
                     if (seen.size > 0) break;
                 }
@@ -191,20 +264,36 @@
                 return Array.from(seen.values());
             }
 
+            // Combined discovery process
+            async function discoverMp4Files() {
+                const gh = detectGitHubInfo();
+                if (gh && gh.owner && gh.repo) {
+                    if (statusEl) statusEl.textContent = `Querying GitHub repository (${gh.owner}/${gh.repo})...`;
+                    const ghVideos = await fetchFromGitHubApi(gh.owner, gh.repo, gh.path);
+                    if (ghVideos.length > 0) return ghVideos;
+                }
+
+                // Fallback to local server directory scan
+                if (statusEl) statusEl.textContent = 'Scanning local folder...';
+                return await fetchFromLocalDirectory();
+            }
+
             function renderGrid(videos) {
                 if (statusEl) {
-                    statusEl.textContent = videos.length > 0 ? `Found ${videos.length} MP4 video${videos.length === 1 ? '' : 's'}` : 'No videos found';
+                    statusEl.textContent = videos.length > 0 
+                        ? `Found ${videos.length} MP4 video${videos.length === 1 ? '' : 's'}` 
+                        : 'No MP4 videos detected';
                 }
 
                 if (!videos || videos.length === 0) {
                     container.innerHTML = `
-                        <div class="col-span-full flex flex-col items-center justify-center py-28 px-4 text-center">
+                        <div class="col-span-full flex flex-col items-center justify-center py-24 px-4 text-center">
                             <div class="w-14 h-14 rounded-2xl bg-slate-800/50 text-slate-500 flex items-center justify-center mb-4 border border-slate-700/50">
                                 <i class="fa-regular fa-file-video text-2xl"></i>
                             </div>
-                            <p class="text-sm font-medium text-slate-300">No MP4 videos detected in this folder</p>
+                            <p class="text-sm font-medium text-slate-300">No MP4 videos found</p>
                             <p class="text-xs text-slate-500 max-w-sm mt-1.5 leading-relaxed">
-                                Ensure directory indexing is enabled on your local web server, or click <strong>"Open Folder / Files"</strong> above to select videos directly.
+                                Enter a valid GitHub repository above (e.g., <strong>unknowmail03-a11y/videos</strong>) or click <strong>"Open Local"</strong> to load MP4 files manually.
                             </p>
                         </div>
                     `;
@@ -256,17 +345,26 @@
                         <div class="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center mb-4 border border-indigo-500/30 animate-spin">
                             <i class="fa-solid fa-circle-notch text-xl"></i>
                         </div>
-                        <h3 class="text-sm font-medium text-slate-300">Scanning directory for MP4 videos...</h3>
+                        <h3 class="text-sm font-medium text-slate-300">Scanning for MP4 videos...</h3>
                     </div>
                 `;
-                if (statusEl) statusEl.textContent = 'Scanning local folder...';
-                
                 const videos = await discoverMp4Files();
                 renderGrid(videos);
             }
             window.init = init;
 
-            // Handle manual local file selecting
+            function fetchFromGitHubInput() {
+                init();
+            }
+            window.fetchFromGitHubInput = fetchFromGitHubInput;
+
+            if (githubInput) {
+                githubInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') fetchFromGitHubInput();
+                });
+            }
+
+            // Local folder file upload selection
             if (fileInput) {
                 fileInput.addEventListener('change', (e) => {
                     const files = Array.from(e.target.files || []).filter(f => f.name.toLowerCase().endsWith('.mp4'));
@@ -280,7 +378,7 @@
                 });
             }
 
-            // Close modal on background click or ESC key
+            // Modal closing event handlers
             document.getElementById('video-modal').addEventListener('click', (e) => {
                 if (e.target.id === 'video-modal') closeModal();
             });
